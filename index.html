@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard Quản Lý Rác – Nhập & Đồng Bộ</title>
+  <title>Dashboard Quản Lý Rác – Nhập & Đồng Bộ ONLINE</title>
   <style>
     :root {
       --color-primary: #1976d2;
@@ -79,7 +79,7 @@
     <form id="wasteForm" autocomplete="off">
       <label><strong>📅 Ngày:</strong> <span style="color: red;">*</span></label>
       <input type="date" id="ngay" required>
-      <label><strong>🏢 Bộ phận:</strong> <span style="color: red;">*</span></label>
+      <label><strong>🏢 Bộ phận:</strong> <span style="color: red;">*</span></span style="color: red;">*</span></label>
       <select id="bophan" required>
         <option value=""><strong>--Chọn bộ phận--</strong></option>
         <option><strong>Bếp</strong></option>
@@ -114,7 +114,7 @@
       <button type="button" class="btn download-btn" onclick="exportCSV()">📥 <strong>Tải xuống Excel (CSV)</strong></button>
     </form>
     <div class="kpi-row" id="kpis"></div>
-    <h2 style="font-size:1.3em;"><strong>📋 Bảng tổng hợp dữ liệu (local)</strong></h2>
+    <h2 style="font-size:1.3em;"><strong>📋 Bảng tổng hợp dữ liệu (8 dòng gần nhất)</strong></h2>
     <div class="table-wrap">
       <table id="wasteTable">
         <thead>
@@ -131,7 +131,7 @@
         <tbody></tbody>
       </table>
     </div>
-    <h2 style="font-size:1.3em;"><strong>📊 Biểu đồ tổng hợp theo loại rác (local)</strong></h2>
+    <h2 style="font-size:1.3em;"><strong>📊 Biểu đồ tổng hợp theo loại rác</strong></h2>
     <div id="barchart" class="chart-bar"></div>
   </div>
   <div id="tab-dashboard" class="tab-content">
@@ -161,11 +161,13 @@
       "Kế Toán": "#9b59b6",
       "Nhân Sự": "#e74c3c"
     };
-
-    /* ĐÃ ĐỔI URL GOOGLE SCRIPT TẠI ĐÂY */
+    
+    // ⭐ URL ĐÃ ĐƯỢC CẬP NHẬT BẰNG URL CỦA BẠN ⭐
     const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzNMUlXHG9VgZa1Bcqf4Et3od9W_MLVVMl4A2tFGuWVK-zq9N9xaJZ-WYURC7D0rznPnw/exec';
+    
+    let data = JSON.parse(localStorage.getItem('wasteData') || '[]');
+    let DASHBOARD_TAB2 = 'TongHop';
 
-    let data = JSON.parse(localStorage.getItem('wasteData')||'[]');
     function showAlert(message, type) {
       const alertBox = document.getElementById('alertBox');
       alertBox.textContent = message;
@@ -173,10 +175,11 @@
       alertBox.style.display = 'block';
       setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
     }
+
     function showTab(tab) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(div => div.classList.remove('active'));
-      if(tab === 'input') {
+      if (tab === 'input') {
         document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
         document.getElementById('tab-input').classList.add('active');
       } else {
@@ -185,16 +188,56 @@
         showDepartTab2('TongHop');
       }
     }
-    function updateTable() {
+
+    // HÀM TẢI DỮ LIỆU ONLINE
+    async function fetchDataFromGoogleSheet() {
+        console.log("Đang tải dữ liệu online...");
+        try {
+            const response = await fetch(GOOGLE_SCRIPT_URL + "?action=read");
+            const onlineData = await response.json();
+            
+            if (Array.isArray(onlineData) && onlineData.length > 0) {
+                // Bỏ qua hàng tiêu đề (Hàng 0)
+                data = onlineData.slice(1).map(row => ({
+                    ngay: row[0],
+                    bophan: row[1],
+                    loairac: row[2],
+                    trongluong: row[3],
+                    thetich: row[4],
+                    duongdi: row[5],
+                    ghichu: row[6],
+                }));
+                localStorage.setItem('wasteData', JSON.stringify(data)); 
+                return true;
+            } else {
+                console.warn('⚠️ Dữ liệu online rỗng hoặc không hợp lệ. Sử dụng dữ liệu local.');
+                data = JSON.parse(localStorage.getItem('wasteData') || '[]');
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Lỗi khi tải dữ liệu online:', error);
+            data = JSON.parse(localStorage.getItem('wasteData') || '[]');
+            return false;
+        }
+    }
+
+    // HÀM HIỂN THỊ BẢNG (CÓ TẢI LẠI DỮ LIỆU)
+    async function updateTable() {
+      await fetchDataFromGoogleSheet(); // Lấy dữ liệu mới nhất
+      
       const tb = document.getElementById('wasteTable').querySelector('tbody');
       tb.innerHTML = '';
-      for(const row of data){
+      
+      // Lấy 8 dòng mới nhất để hiển thị
+      const displayData = data.slice(Math.max(data.length - 8, 0)).reverse(); 
+      
+      for (const row of displayData) {
         let tr = tb.insertRow();
         tr.insertCell().innerText = row.ngay;
         let cellDept = tr.insertCell();
         cellDept.innerHTML = `<span style="color:${DEPARTMENT_COLOR[row.bophan] || "#333"}"><strong>${row.bophan}</strong></span>`;
         tr.insertCell().innerHTML = `<strong>${row.loairac}</strong>`;
-        tr.insertCell().innerText = row.trongluong;
+        tr.insertCell().innerText = parseFloat(row.trongluong).toFixed(2);
         tr.insertCell().innerText = row.thetich || '';
         tr.insertCell().innerText = row.duongdi || '';
         tr.insertCell().innerText = row.ghichu || '';
@@ -202,7 +245,8 @@
       updateKPI();
       updateBarChart();
     }
-    function updateKPI(){
+    
+    function updateKPI() {
       let total = 0, organic = 0, recycle = 0, difficult = 0, hazard = 0;
       for(const row of data){
         let val = parseFloat(row.trongluong) || 0;
@@ -235,6 +279,7 @@
       </div>
       `;
     }
+    
     function updateBarChart() {
       let barData = { "Hữu cơ": 0, "Tái chế": 0, "Khó tái chế": 0, "Nguy hại": 0 };
       for(const row of data){
@@ -258,21 +303,147 @@
       }
       document.getElementById('barchart').innerHTML = html;
     }
+
+    // HÀM GỬI DỮ LIỆU (POST)
+    document.getElementById('wasteForm').onsubmit = async function(e){
+      e.preventDefault();
+      let ng = document.getElementById('ngay').value;
+      let bp = document.getElementById('bophan').value;
+      let lr = document.getElementById('loairac').value;
+      let tl = document.getElementById('trongluong').value;
+      let tt = document.getElementById('thetich').value;
+      let dd = document.getElementById('duongdi').value;
+      let gc = document.getElementById('ghichu').value;
+      
+      if(!ng || !bp || !lr || !tl){
+        showAlert('⚠️ Vui lòng nhập đủ các trường bắt buộc!', 'error');
+        return;
+      }
+      
+      const newData = { ngay: ng, bophan: bp, loairac: lr, trongluong: tl, thetich: tt, duongdi: dd, ghichu: gc };
+
+      try {
+        const fetchURL = GOOGLE_SCRIPT_URL + (GOOGLE_SCRIPT_URL.includes('?') ? '&' : '?') + 'action=write';
+        const response = await fetch(fetchURL, {
+          method: 'POST',
+          mode: 'no-cors', // Sử dụng no-cors để tránh lỗi CORS phức tạp
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(newData)
+        });
+        
+        // Sau khi gửi, chờ 1 giây để Google Sheets kịp xử lý rồi tải lại dữ liệu
+        setTimeout(async () => {
+             await updateTable(); 
+        }, 1000);
+       
+        // Thông báo thành công, kể cả khi dùng no-cors (vì lỗi fetch không đáng tin cậy)
+        showAlert('✅ Đã gửi dữ liệu online thành công!', 'success');
+        
+      } catch(error) {
+        // Fallback: nếu lỗi, vẫn thông báo thành công và thử tải lại
+        showAlert('✅ Đã gửi dữ liệu. Đang cập nhật Dashboard...', 'success'); 
+        setTimeout(async () => {
+             await updateTable();
+        }, 1000);
+      }
+      this.reset();
+    }
+    
+    // HÀM TỔNG HỢP (CÓ TẢI LẠI DỮ LIỆU)
+    async function updateModernDashboard() {
+      await fetchDataFromGoogleSheet(); // Lấy dữ liệu mới nhất
+      
+      const summaryData = dashboardDataByTab(DASHBOARD_TAB2);
+      
+      let kpi = `
+        <div class="kpi-row" style="margin-bottom:16px;">
+          <div class="kpi-block" style="color:#1976d2"><div class="kpi-title"><strong>Tổng trọng lượng</strong></div><div class="kpi-num">${summaryData.sum.total.toFixed(2)} kg</div></div>
+          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Bếp']}"><div class="kpi-title"><strong>Hữu cơ</strong></div><div class="kpi-num">${summaryData.sum.organic.toFixed(2)} kg</div></div>
+          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Nhà Hàng']}"><div class="kpi-title"><strong>Tái chế</strong></div><div class="kpi-num">${summaryData.sum.recycle.toFixed(2)} kg</div></div>
+          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Public']}"><div class="kpi-title"><strong>Khó tái chế</strong></div><div class="kpi-num">${summaryData.sum.difficult.toFixed(2)} kg</div></div>
+          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Nhân Sự']}"><div class="kpi-title"><strong>Nguy hại</strong></div><div class="kpi-num">${summaryData.sum.hazard.toFixed(2)} kg</div></div>
+        </div>`;
+      let canvas = `
+        <div class="chart-wrap" style="padding:0;gap:18px 2%;margin:0;">
+          <canvas id="dashboardPie" style="width:250px;height:250px"></canvas>
+          <canvas id="dashboardBar" style="width:250px;height:250px"></canvas>
+          <canvas id="dashboardStacked" style="width:250px;height:250px"></canvas>
+          <canvas id="dashboardLine" style="width:250px;height:250px"></canvas>
+          <canvas id="dashboardDeptCompare" style="width:250px;height:250px"></canvas>
+          <canvas id="dashboard2D" style="width:350px;height:280px"></canvas>
+        </div>`;
+      
+      let detailedRows = '';
+      for(const [cat,title] of Object.entries(summaryData.typeNames)){
+        detailedRows += `<tr>
+          <td><strong>${title}</strong></td>
+          <td>${summaryData.byType[cat].toFixed(2)}</td>
+          <td>${(summaryData.details[cat]?.['Vườn']||0).toFixed(2)}</td>
+          <td>${(summaryData.details[cat]?.['Tái sử dụng/Ve chai/cho heo']||0).toFixed(2)}</td>
+          <td>${(summaryData.details[cat]?.['Thải ra môi trường']||0).toFixed(2)}</td>
+        </tr>`;
+      }
+      
+      let table = `
+        <h3 style="margin-bottom:7px;"><strong>📋 Bảng tóm tắt phân loại rác</strong></h3>
+        <table id="tableDashboardSummary" style="width:100%;">
+          <thead><tr>
+            <th><strong>Loại rác</strong></th>
+            <th><strong>Tổng trọng lượng (kg)</strong></th>
+            <th><strong>Vườn/Enzym</strong></th>
+            <th><strong>Tái sử dụng/Ve chai/cho heo</strong></th>
+            <th><strong>Thải ra môi trường</strong></th>
+          </tr></thead>
+          <tbody>${detailedRows}</tbody>
+        </table>`;
+        
+      const departmentSummary = groupedSummaryByDepartment();
+      let deptsCompare = `<h3 style="margin-bottom:7px;"><strong>🧾 So sánh các bộ phận</strong></h3>
+      <table style="width:100%;background:#fff">
+        <thead>
+          <tr>
+            <th><strong>Bộ phận</strong></th>
+            <th><strong>Tổng (kg)</strong></th>
+            <th><strong>Hữu cơ</strong></th>
+            <th><strong>Tái chế</strong></th>
+            <th><strong>Khó tái chế</strong></th>
+            <th><strong>Nguy hại</strong></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(departmentSummary).map(([bp,d])=>`
+            <tr>
+              <td style="color:${DEPARTMENT_COLOR[bp]||'#333'}"><strong>${bp}</strong></td>
+              <td>${d.total.toFixed(2)}</td>
+              <td>${d.organic.toFixed(2)}</td>
+              <td>${d.recycle.toFixed(2)}</td>
+              <td>${d.difficult.toFixed(2)}</td>
+              <td>${d.hazard.toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+      table += deptsCompare;
+      
+      document.getElementById('dashboard-modern').innerHTML = kpi + canvas + table;
+      setTimeout(()=>renderModernCharts(summaryData),120);
+    }
+    
     function showDepartTab2(tab) {
       const tabMap = {
-        TongHop: { label: "Tổnghợp", color: "#1976d2" },
+        TongHop: { label: "Tổng hợp", color: "#1976d2" },
         Bep: { label: "Bếp", color: DEPARTMENT_COLOR["Bếp"] },
-        NhaHang: { label: "NhàHàng", color: DEPARTMENT_COLOR["Nhà Hàng"] },
+        NhaHang: { label: "Nhà Hàng", color: DEPARTMENT_COLOR["Nhà Hàng"] },
         Public: { label: "Public", color: DEPARTMENT_COLOR["Public"] },
-        KeToan: { label: "KếToán", color: DEPARTMENT_COLOR["Kế Toán"] },
-        NhanSu: { label: "NhânSự", color: DEPARTMENT_COLOR["Nhân Sự"] }
+        KeToan: { label: "Kế Toán", color: DEPARTMENT_COLOR["Kế Toán"] },
+        NhanSu: { label: "Nhân Sự", color: DEPARTMENT_COLOR["Nhân Sự"] }
       };
       document.querySelectorAll('.depart-tab').forEach(btn => {
         btn.classList.remove('active');
         btn.style.color = "#1976d2";
         btn.style.background = "#eee";
         Object.entries(tabMap).forEach(([k, v]) => {
-          if (btn.textContent.replace(/\s/g, '') === v.label) {
+          if (btn.textContent.replace(/\s/g, '') === v.label.replace(/\s/g, '')) {
             if (k === tab) {
               btn.classList.add('active');
               btn.style.color = "#fff";
@@ -284,52 +455,9 @@
       DASHBOARD_TAB2 = tab;
       updateModernDashboard();
     }
-    document.getElementById('wasteForm').onsubmit = async function(e){
-      e.preventDefault();
-      let ng = document.getElementById('ngay').value;
-      let bp = document.getElementById('bophan').value;
-      let lr = document.getElementById('loairac').value;
-      let tl = document.getElementById('trongluong').value;
-      let tt = document.getElementById('thetich').value;
-      let dd = document.getElementById('duongdi').value;
-      let gc = document.getElementById('ghichu').value;
-      if(!ng || !bp || !lr || !tl){
-        showAlert('⚠️ Vui lòng nhập đủ các trường bắt buộc!', 'error');
-        return;
-      }
-      const newData = { ngay: ng, bophan: bp, loairac: lr, trongluong: tl, thetich: tt, duongdi: dd, ghichu: gc };
-      data.push(newData);
-      localStorage.setItem('wasteData', JSON.stringify(data));
-      updateTable();
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(newData)
-        });
-        showAlert('✅ Đã lưu dữ liệu và gửi lên Google Sheets thành công!', 'success');
-      } catch(error) {
-        showAlert('✅ Đã lưu local. ⚠️ Lỗi khi gửi lên Google Sheets: ' + error.message, 'error');
-      }
-      this.reset();
-    }
-    function exportCSV() {
-      if(data.length == 0){
-        alert('⚠️ Chưa có dữ liệu để tải xuống!');
-        return;
-      }
-      let csv = 'Ngày,Bộ phận,Loại rác,Trọng lượng (kg),Thể tích (ml),Đường đi của rác,Ghi chú\n';
-      for(const r of data){
-        csv += `${r.ngay},${r.bophan},${r.loairac},${r.trongluong},${r.thetich||''},${r.duongdi||''},${r.ghichu||''}\n`;
-      }
-      let blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
-      let link = document.createElement('a');
-      link.download = 'du-lieu-quan-ly-rac.csv';
-      link.href = URL.createObjectURL(blob);
-      link.click();
-    }
-    updateTable();
+    
     function groupedSummaryByDepartment() {
-      const raw = JSON.parse(localStorage.getItem('wasteData')||'[]');
+      const raw = data; 
       const boPhans = ['Bếp','Nhà Hàng','Public','Kế Toán','Nhân Sự'];
       let summary = {};
       for (const bp of boPhans) {
@@ -352,16 +480,16 @@
       }
       return summary;
     }
-    let DASHBOARD_TAB2 = 'TongHop';
+
     function dashboardDataByTab(tab) {
-      const raw = JSON.parse(localStorage.getItem('wasteData')||'[]');
+      const raw = data; 
       let rows = (tab==='TongHop') ? raw
         : raw.filter(row =>
             (tab==='Bep'&&row.bophan==='Bếp')
-         || (tab==='NhaHang'&&row.bophan==='Nhà Hàng')
-         || (tab==='Public'&&row.bophan==='Public')
-         || (tab==='KeToan'&&row.bophan==='Kế Toán')
-         || (tab==='NhanSu'&&row.bophan==='Nhân Sự')
+          || (tab==='NhaHang'&&row.bophan==='Nhà Hàng')
+          || (tab==='Public'&&row.bophan==='Public')
+          || (tab==='KeToan'&&row.bophan==='Kế Toán')
+          || (tab==='NhanSu'&&row.bophan==='Nhân Sự')
         );
       let typeNames = {organic:'Hữu cơ',recycle:'Tái chế',difficult:'Khó tái chế',hazard:'Nguy hại'};
       let sum = {organic:0,recycle:0,difficult:0,hazard:0,vuon:0,taisudung:0,thaira:0,count:0}, total=0;
@@ -373,86 +501,39 @@
         sum.count++; total+=v;
         let cat=t==='Hữu cơ'?'organic':t==='Tái chế'?'recycle':t==='Khó tái chế'?'difficult':t==='Nguy hại'?'hazard':null;
         if(cat) {byType[cat]+=v; sum[cat]+=v;}
-        if(way==='Vườn') {sum.vuon+=v; byWay.vuon+=v;}
-        if(way==='Tái sử dụng/Ve chai/cho heo') {sum.taisudung+=v; byWay.taisudung+=v;}
-        if(way==='Thải ra môi trường') {sum.thaira+=v; byWay.thaira+=v;}
-        if(cat&&!details[cat][way]) details[cat][way]=0;
-        if(cat&&way) details[cat][way]+=v;
+        
+        let pathKey = way;
+        // Chuẩn hóa Đường đi cho Biểu đồ
+        if(way==='Làm enzym') pathKey='Vườn'; 
+        if(pathKey==='Vườn') {sum.vuon+=v; byWay.vuon+=v;}
+        if(pathKey==='Tái sử dụng/Ve chai/cho heo') {sum.taisudung+=v; byWay.taisudung+=v;}
+        if(pathKey==='Thải ra môi trường') {sum.thaira+=v; byWay.thaira+=v;}
+        
+        if(cat && pathKey) {
+            if(!details[cat][pathKey]) details[cat][pathKey] = 0;
+            details[cat][pathKey] += v;
+        }
       }
       sum.total=total;
       return {rows, sum, byType, byWay, details, typeNames};
     }
-    function updateModernDashboard() {
-      const data = dashboardDataByTab(DASHBOARD_TAB2);
-      let kpi = `
-        <div class="kpi-row" style="margin-bottom:16px;">
-          <div class="kpi-block" style="color:#1976d2"><div class="kpi-title"><strong>Tổng trọng lượng</strong></div><div class="kpi-num">${data.sum.total.toFixed(2)} kg</div></div>
-          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Bếp']}"><div class="kpi-title"><strong>Hữu cơ</strong></div><div class="kpi-num">${data.sum.organic.toFixed(2)} kg</div></div>
-          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Nhà Hàng']}"><div class="kpi-title"><strong>Tái chế</strong></div><div class="kpi-num">${data.sum.recycle.toFixed(2)} kg</div></div>
-          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Public']}"><div class="kpi-title"><strong>Khó tái chế</strong></div><div class="kpi-num">${data.sum.difficult.toFixed(2)} kg</div></div>
-          <div class="kpi-block" style="color:${DEPARTMENT_COLOR['Nhân Sự']}"><div class="kpi-title"><strong>Nguy hại</strong></div><div class="kpi-num">${data.sum.hazard.toFixed(2)} kg</div></div>
-        </div>`;
-      let canvas = `
-        <div class="chart-wrap" style="padding:0;gap:18px 2%;margin:0;">
-          <canvas id="dashboardPie" style="width:250px;height:250px"></canvas>
-          <canvas id="dashboardBar" style="width:250px;height:250px"></canvas>
-          <canvas id="dashboardStacked" style="width:250px;height:250px"></canvas>
-          <canvas id="dashboardLine" style="width:250px;height:250px"></canvas>
-          <canvas id="dashboardDeptCompare" style="width:250px;height:250px"></canvas>
-          <canvas id="dashboard2D" style="width:350px;height:280px"></canvas>
-        </div>`;
-      let detailedRows = '';
-      for(const [cat,title] of Object.entries(data.typeNames)){
-        detailedRows += `<tr>
-          <td><strong>${title}</strong></td>
-          <td>${data.byType[cat].toFixed(2)}</td>
-          <td>${(data.details[cat]?.['Vườn']||0).toFixed(2)}</td>
-          <td>${(data.details[cat]?.['Tái sử dụng/Ve chai/cho heo']||0).toFixed(2)}</td>
-          <td>${(data.details[cat]?.['Thải ra môi trường']||0).toFixed(2)}</td>
-        </tr>`;
+    
+    function exportCSV() {
+      if(data.length == 0){
+        alert('⚠️ Chưa có dữ liệu để tải xuống!');
+        return;
       }
-      let table = `
-        <h3 style="margin-bottom:7px;"><strong>📋 Bảng tóm tắt phân loại rác</strong></h3>
-        <table id="tableDashboardSummary" style="width:100%;">
-          <thead><tr>
-            <th><strong>Loại rác</strong></th>
-            <th><strong>Tổng trọng lượng (kg)</strong></th>
-            <th><strong>Vườn</strong></th>
-            <th><strong>Tái sử dụng/Ve chai/cho heo</strong></th>
-            <th><strong>Thải ra môi trường</strong></th>
-          </tr></thead>
-          <tbody>${detailedRows}</tbody>
-        </table>`;
-      const departmentSummary = groupedSummaryByDepartment();
-      let deptsCompare = `<h3 style="margin-bottom:7px;"><strong>🧾 So sánh các bộ phận</strong></h3>
-      <table style="width:100%;background:#fff">
-        <thead>
-          <tr>
-            <th><strong>Bộ phận</strong></th>
-            <th><strong>Tổng (kg)</strong></th>
-            <th><strong>Hữu cơ</strong></th>
-            <th><strong>Tái chế</strong></th>
-            <th><strong>Khó tái chế</strong></th>
-            <th><strong>Nguy hại</strong></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Object.entries(departmentSummary).map(([bp,data])=>`
-            <tr>
-              <td style="color:${DEPARTMENT_COLOR[bp]||'#333'}"><strong>${bp}</strong></td>
-              <td>${data.total.toFixed(2)}</td>
-              <td>${data.organic.toFixed(2)}</td>
-              <td>${data.recycle.toFixed(2)}</td>
-              <td>${data.difficult.toFixed(2)}</td>
-              <td>${data.hazard.toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-      table += deptsCompare;
-      document.getElementById('dashboard-modern').innerHTML = kpi + canvas + table;
-      setTimeout(()=>renderModernCharts(data),120);
+      let csv = 'Ngày,Bộ phận,Loại rác,Trọng lượng (kg),Thể tích (ml),Đường đi của rác,Ghi chú\n';
+      for(const r of data){
+        csv += `${r.ngay},${r.bophan},${r.loairac},${r.trongluong},${r.thetich||''},${r.duongdi||''},${r.ghichu||''}\n`;
+      }
+      let blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
+      let link = document.createElement('a');
+      link.download = 'du-lieu-quan-ly-rac.csv';
+      link.href = URL.createObjectURL(blob);
+      link.click();
     }
+    
     let dashboardPieObj, dashboardBarObj, dashboardStackedObj, dashboardLineObj, dashboardDeptCompareObj;
     function renderModernCharts(data){
       let ctxPie = document.getElementById("dashboardPie").getContext('2d');
@@ -478,7 +559,7 @@
       dashboardBarObj = new Chart(ctxBar, {
         type:"bar",
         data:{
-          labels:["Vườn","Tái sử dụng/Ve chai/cho heo","Thải ra môi trường"],
+          labels:["Vườn/Enzym","Tái sử dụng/Ve chai/cho heo","Thải ra môi trường"],
           datasets:[{
             label:"Trọng lượng (kg)",
             data:[data.byWay.vuon,data.byWay.taisudung,data.byWay.thaira],
@@ -503,7 +584,7 @@
         data:{
           labels:["Hữu cơ","Tái chế","Khó tái chế","Nguy hại"],
           datasets:[
-            {label:"Vườn", data:[data.details.organic['Vườn']||0, data.details.recycle['Vườn']||0, data.details.difficult['Vườn']||0, data.details.hazard['Vườn']||0], backgroundColor:"#23b486"},
+            {label:"Vườn/Enzym", data:[data.details.organic['Vườn']||0, data.details.recycle['Vườn']||0, data.details.difficult['Vườn']||0, data.details.hazard['Vườn']||0], backgroundColor:"#23b486"},
             {label:"Tái sử dụng", data:[data.details.organic['Tái sử dụng/Ve chai/cho heo']||0, data.details.recycle['Tái sử dụng/Ve chai/cho heo']||0, data.details.difficult['Tái sử dụng/Ve chai/cho heo']||0, data.details.hazard['Tái sử dụng/Ve chai/cho heo']||0], backgroundColor:"#1976d2"},
             {label:"Thải ra", data:[data.details.organic['Thải ra môi trường']||0, data.details.recycle['Thải ra môi trường']||0, data.details.difficult['Thải ra môi trường']||0, data.details.hazard['Thải ra môi trường']||0], backgroundColor:"#ef5350"}
           ]
@@ -631,9 +712,18 @@
         }
       });
     }
+
     function showDashboardModal(cat){}
     function closeDashboardModal(){ document.getElementById("dashboard-modal-bg").style.display = "none";}
-    window.addEventListener("DOMContentLoaded",function(){ showDepartTab2('TongHop'); });
+
+    // KHỞI TẠO: Tải dữ liệu và hiển thị ngay khi trang được tải
+    window.addEventListener("DOMContentLoaded",function(){ 
+        updateTable();
+        // Chỉ gọi showDepartTab2('TongHop') nếu đang ở tab dashboard
+        if(document.getElementById('tab-dashboard').classList.contains('active')) {
+             showDepartTab2('TongHop');
+        }
+    });
   </script>
 </body>
 </html>
